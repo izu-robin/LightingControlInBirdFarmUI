@@ -1,0 +1,52 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Rust Backend ---
+# Ignore the cargo build directory
+src-tauri/target/
+
+# --- Frontend ---
+# Node.js dependencies
+node_modules/
+# Build output from your frontend (e.g., Vite/React/Vue)
+dist/
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Tauri Specific ---
+# Ignore generated icons and resource artifacts
+src-tauri/gen/
+# If you use the bundler for specific OS installers
+src-tauri/bundle/
+
+# --- Environment & OS ---
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
