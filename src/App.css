@@ -103,7 +103,7 @@ body {
 .hours-header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  
   margin-bottom: 8px;
 }
 
@@ -122,7 +122,7 @@ body {
   background: transparent;
   border-radius: 6px;
   padding: 4px 0;
-  gap: 2px;
+  gap: 0;
 }
 
 .hour-segment {
@@ -131,11 +131,17 @@ body {
   color: #1B1B1B;
   font-size: 8px;
   font-weight: 600;
-  padding: 3px 0;
+  padding: 5px 0;
   background: #D9E986;
   border-radius: 50%;
-  width: 24px;
-  margin: 0 1px;
+  margin: 0 2px;
+}
+.hour-segment:first-child {
+  margin-left: 0;
+}
+
+.hour-segment:last-child {
+  margin-right: 0;
 }
 
 .charts-wrapper {
@@ -323,9 +329,9 @@ body {
 
 .action-btn {
   width: 100%;
-  padding: 6px;
-  border-radius: 20px;
-  font-size: 11px;
+  padding: 12px 8px;
+  border-radius: 25px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   border: none;
@@ -420,7 +426,7 @@ body {
 .event-log {
   background: #1B1B1B;
   border-radius: 12px;
-  margin-top: 15px;
+  margin-top: 44px;
   overflow: hidden;
   border: 1px solid #323232;
 }
@@ -539,11 +545,12 @@ body {
 }
 
 .pole-with-lamps {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  right: 88px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    right: -17px;
+    top: 8px;
 }
 
 .pole-image {
@@ -608,28 +615,26 @@ body {
 }
 
 .panel-image {
-  width: 49px;
-  height: auto;
-  object-fit: contain;
-  position: absolute;
-  left: 346px;
+    width: 68px;
+    height: auto;
+    object-fit: contain;
+    position: absolute;
+    left: 290px;
 }
 
 .wires-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  margin-left: 20px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    margin-bottom: 3px;
+    margin-right: 277px;
 }
 
 .wires-image {
   width: 171px;
   height: auto;
   object-fit: contain;
-  position: absolute;
-  top: 23px;
-  right: 106px;
 }
 
 .pole-with-lamps:nth-child(1) .lamps-container {
@@ -652,4 +657,53 @@ body {
 
 .lamp-item .flashlight-container {
   transform: translateY(0px);
+}
+
+@media (min-width: 1920px) {
+  .panel-image {
+    width: 68px;
+    left: 351px;
+  }
+  
+  .pole-with-lamps {
+    right: -48px;
+    top: 8px;
+  }
+}
+.chart-row {
+  background: #0f0f0f;
+  border-radius: 6px;
+  padding: 4px;
+  height: 40px;
+  margin-bottom: 7px;
+  position: relative;
+  cursor: pointer;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  background: #1B1B1B;
+  color: #D9E986;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 100;
+  border: 1px solid #B999EC;
+  pointer-events: none;
+  font-family: 'Inter', monospace;
+}
+
+.chart-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #B999EC transparent transparent transparent;
 }

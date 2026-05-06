@@ -13,6 +13,7 @@ function App() {
   const [sunset, setSunset] = useState<string>("0");
   
   const [lightsOn, setLightsOn] = useState<boolean[]>(Array(15).fill(true));
+  const [activeTooltip, setActiveTooltip] = useState<{ blockIndex: number; text: string; x: number } | null>(null);
   
   const [events] = useState([
     { id: 1, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
@@ -47,10 +48,18 @@ function App() {
   ];
 
   const timeBlocks = [
-    { label: "1..3", data: [0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
-    { label: "4..10", data: [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0] },
-    { label: "11..21", data: [0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0] },
-    { label: "22..23", data: [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0] }
+    { label: "1..3", data: [
+      0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    ] },
+    { label: "4..10", data: [
+      0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0
+    ] },
+    { label: "11..21", data: [
+      0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    ] },
+    { label: "22..23", data: [
+      0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0
+    ] }
   ];
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -62,6 +71,37 @@ function App() {
       return newState;
     });
   };
+
+  const getTooltipText = (blockIndex: number, mouseX: number, rectWidth: number) => {
+  const block = timeBlocks[blockIndex];
+  const hourIndex = Math.floor((mouseX / rectWidth) * 24);
+  
+  if (hourIndex < 0 || hourIndex >= 24) return null;
+  
+  const value = block.data[hourIndex];
+  
+  if (value === 1) {
+    let startHour = hourIndex;
+    let endHour = hourIndex;
+    
+    for (let i = hourIndex; i >= 0; i--) {
+      if (block.data[i] === 1) startHour = i;
+      else break;
+    }
+    
+    for (let i = hourIndex; i < block.data.length; i++) {
+      if (block.data[i] === 1) endHour = i;
+      else break;
+    }
+    
+    const hoursCount = endHour - startHour + 1;
+    const hoursText = hoursCount === 1 ? `${hoursCount} час` : `${hoursCount} часов`;
+    
+    return { text: `свет включен с ${startHour} по ${endHour} (${hoursText})`, x: mouseX };
+  }
+  
+  return null;
+};
 
   const handleStart = () => console.log("Старт");
   const handleStopReset = () => console.log("Стоп/Сброс");
@@ -174,28 +214,102 @@ function App() {
                   </div>
                   
                   <div className="charts-wrapper">
-                    {timeBlocks.map((block, idx) => (
-                      <div key={idx} className="chart-row">
+                    {timeBlocks.map((block, blockIdx) => (
+                      <div 
+                        key={blockIdx} 
+                        className="chart-row"
+                        onMouseMove={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = e.clientX - rect.left;
+                          const tooltipData = getTooltipText(blockIdx, x, rect.width);
+                          if (tooltipData) {
+                            setActiveTooltip({ blockIndex: blockIdx, text: tooltipData.text, x: tooltipData.x });
+                          } else {
+                            setActiveTooltip(null);
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          setActiveTooltip(null);
+                        }}
+                      >
                         <svg className="row-svg" viewBox="0 0 800 30" preserveAspectRatio="none">
-                          <polyline
-                            points={block.data.map((value, index) => {
-                              const x = (index * (800 / 23));
-                              const y = value === 1 ? 5 : 25;
-                              return `${x},${y}`;
-                            }).join(' ')}
-                            fill="none"
-                            stroke="#B999EC"
-                            strokeWidth="2"
-                          />
-                          <polygon
-                            points={`0,30 ${block.data.map((value, index) => {
-                              const x = (index * (800 / 23));
-                              const y = value === 1 ? 5 : 25;
-                              return `${x},${y}`;
-                            }).join(' ')} 800,30`}
-                            fill="rgba(185, 153, 236, 0.25)"
-                          />
-                        </svg>
+  <polyline
+    points={(() => {
+      const points = [];
+      for (let i = 0; i <= block.data.length; i++) {
+        let x, y;
+        if (i === 0) {
+          x = 0;
+          y = block.data[0] === 1 ? 5 : 25;
+          points.push(`${x},${y}`);
+        }
+        
+        if (i < block.data.length) {
+          x = i * (800 / 24);
+          
+          if (i > 0 && block.data[i] !== block.data[i - 1]) {
+            if (block.data[i] === 1) {
+              points.push(`${x},25`);
+              points.push(`${x},5`);
+            } else {
+              points.push(`${x},5`);
+              points.push(`${x},25`);
+            }
+          }
+          
+          y = block.data[i] === 1 ? 5 : 25;
+          points.push(`${x},${y}`);
+        }
+      }
+      return points.join(' ');
+    })()}
+    fill="none"
+    stroke="#B999EC"
+    strokeWidth="2"
+    strokeLinejoin="miter"
+    strokeLinecap="butt"
+  />
+  <polygon
+    points={`0,30 ${(() => {
+      const points = [];
+      for (let i = 0; i <= block.data.length; i++) {
+        let x, y;
+        if (i === 0) {
+          x = 0;
+          y = block.data[0] === 1 ? 5 : 25;
+          points.push(`${x},${y}`);
+        }
+        
+        if (i < block.data.length) {
+          x = i * (800 / 24);
+          
+          if (i > 0 && block.data[i] !== block.data[i - 1]) {
+            if (block.data[i] === 1) {
+              points.push(`${x},25`);
+              points.push(`${x},5`);
+            } else {
+              points.push(`${x},5`);
+              points.push(`${x},25`);
+            }
+          }
+          
+          y = block.data[i] === 1 ? 5 : 25;
+          points.push(`${x},${y}`);
+        }
+      }
+      return points.join(' ');
+    })()} 800,30`}
+    fill="rgba(185, 153, 236, 0.25)"
+  />
+</svg>
+                        {activeTooltip && activeTooltip.blockIndex === blockIdx && (
+                          <div 
+                            className="chart-tooltip"
+                            style={{ left: `${activeTooltip.x}px` }}
+                          >
+                            {activeTooltip.text}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
