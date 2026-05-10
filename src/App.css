@@ -707,3 +707,86 @@ body {
   border-style: solid;
   border-color: #B999EC transparent transparent transparent;
 }
+/* === АДАПТИВ ДЛЯ МАЛЕНЬКОГО ОКНА Tauri (ширина меньше 1200px) === */
+/* === АДАПТИВ ДЛЯ МАЛЕНЬКОГО ОКНА Tauri (ширина меньше 1200px) === */
+@media (max-width: 1200px) {
+  .inner-content {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .left-half, .right-panel {
+    width: 100%;
+  }
+  
+  .lighting-control-block {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .poles-stack {
+    align-items: center;
+  }
+  
+  .pole-with-lamps {
+    right: 99px;
+    top: -16px;
+  }
+  
+  .pole-image {
+    width: 200px;
+    margin-left: 0;
+  }
+  
+  .lamps-container {
+    margin-left: 0;
+    gap: 8px;
+  }
+  
+  .pole-with-lamps:nth-child(1) .lamps-container,
+  .pole-with-lamps:nth-child(2) .lamps-container,
+  .pole-with-lamps:nth-child(3) .lamps-container {
+    margin-left: 0;
+    gap: 0px;
+  }
+  
+  .panel-bottom {
+    margin-left: 0;
+    justify-content: center;
+  }
+  
+    .panel-image {
+        margin-top: -22px;
+        margin-left: -31px;
+    }
+  
+  .wires-right {
+    margin-right: 12px;
+    margin-top: -204px;
+  }
+  
+  .wires-image {
+    position: static;
+    width: 163px;
+    margin-top: 50px;
+    margin-right: 166px;
+  }
+  
+  /* === СКРЫВАЕМ ЧАСЫ === */
+  .hours-title {
+    display: none;
+  }
+  
+  .hours-scale {
+    display: none;
+  }
+  
+  /* Графики становятся шире */
+  .charts-wrapper {
+    overflow-x: auto;
+  }
+  
+  .chart-row {
+    min-width: 650px;
+  }
+}
