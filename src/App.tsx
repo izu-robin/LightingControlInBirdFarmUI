@@ -445,7 +445,7 @@ const timeBlocksRef = useRef<TimeBlock[]>(timeBlocks);
                       className="time-label"
                       style={{
                         background: activeBlockIndex === idx && isServerRunning ? '#F36035' : 'transparent',
-                        color: activeBlockIndex === idx && isServerRunning ? 'white' : 'black',
+                        color: activeBlockIndex === idx && isServerRunning ? 'white' : '#D9E986',
                         transition: 'all 0.3s ease'
                       }}
                     >
