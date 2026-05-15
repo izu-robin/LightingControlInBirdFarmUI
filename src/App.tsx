@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
-
+interface TimeBlock {
+  label: string;
+  data: (number | null)[];
+  lastValue: number | null;
+  currentHour: number;
+  isComplete: boolean;
+}
 function App() {
   const [selectedBird, setSelectedBird] = useState<string>("Молодняк");
   const [selectedAge, setSelectedAge] = useState<string>("Молодняк до 18 недель");
-  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isServerRunning, setIsServerRunning] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [counterDays, setCounterDays] = useState<number>(1);
   
   const [duration, setDuration] = useState<string>("0");
   const [illumination, setIllumination] = useState<string>("0");
@@ -15,22 +24,27 @@ function App() {
   const [lightsOn, setLightsOn] = useState<boolean[]>(Array(15).fill(true));
   const [activeTooltip, setActiveTooltip] = useState<{ blockIndex: number; text: string; x: number } | null>(null);
   
-  const [events] = useState([
-    { id: 1, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 2, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 3, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 4, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 5, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 6, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 7, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 8, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 9, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 10, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 11, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 12, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 13, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" },
-    { id: 14, col1: "Текст", col2: "Текст", col3: "Текст", col4: "Текст" }
-  ]);
+  // Каждый блок графика имеет свои уникальные данные
+const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([
+  { label: "1..3", data: Array(24).fill(null), lastValue: null, currentHour: 0, isComplete: false },
+  { label: "4..10", data: Array(24).fill(null), lastValue: null, currentHour: 0, isComplete: false },
+  { label: "11..21", data: Array(24).fill(null), lastValue: null, currentHour: 0, isComplete: false },
+  { label: "22..23", data: Array(24).fill(null), lastValue: null, currentHour: 0, isComplete: false }
+]);
+
+  
+  const [events, setEvents] = useState<any[]>([]);
+  const [activeBlockIndex, setActiveBlockIndex] = useState<number>(0);
+  const [globalCycleDay, setGlobalCycleDay] = useState<number>(1);
+  
+  // Refs
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const serverCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isServerRunningRef = useRef(false);
+  const isPausedRef = useRef(false);
+const timeBlocksRef = useRef<TimeBlock[]>(timeBlocks);
+  const activeBlockIndexRef = useRef(0);
+  const globalCycleDayRef = useRef(1);
   
   const birdTypes = [
     { name: "Родительское стадо", active: false },
@@ -47,22 +61,234 @@ function App() {
     { name: "8-35 дней", active: true }
   ];
 
-  const timeBlocks = [
-    { label: "1..3", data: [
-      0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    ] },
-    { label: "4..10", data: [
-      0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0
-    ] },
-    { label: "11..21", data: [
-      0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    ] },
-    { label: "22..23", data: [
-      0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0
-    ] }
-  ];
-
   const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // Добавление события в журнал (только при изменении состояния)
+  const addEventToLog = (blockLabel: string, hour: number, newValue: number, lastValue: number | null) => {
+    // Если последнее значение такое же - НЕ ЗАПИСЫВАЕМ
+    if (lastValue !== null && lastValue === newValue) {
+      console.log(`Не записываем: час ${hour}, состояние не изменилось (${newValue} === ${lastValue})`);
+      return;
+    }
+    
+    const statusText = newValue === 1 ? 'включен' : 'выключен';
+    
+    const newEvent = {
+      id: Date.now(),
+      day: blockLabel,
+      hour: hour,
+      event: statusText,
+      cycleDay: globalCycleDayRef.current,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    
+    console.log(`Записываем: час ${hour}, состояние изменилось с ${lastValue} на ${newValue}`);
+    setEvents(prev => [newEvent, ...prev].slice(0, 100));
+  };
+
+  // Проверка статуса сервера
+  const checkServerStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/server.php?action=getStatus&hour=0');
+      if (response.ok) {
+        setIsConnected(true);
+        return true;
+      } else {
+        setIsConnected(false);
+        return false;
+      }
+    } catch (error) {
+      setIsConnected(false);
+      return false;
+    }
+  };
+
+  // Получение данных для конкретного часа и блока
+  const fetchHourDataForBlock = async (hour: number, blockIndex: number): Promise<number | null> => {
+    if (!isServerRunningRef.current || isPausedRef.current) return null;
+    
+    try {
+      const response = await fetch(`http://localhost:8000/server.php?action=getStatus&hour=${hour}&block=${blockIndex}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        return result.value;
+      }
+    } catch (error) {
+      setIsConnected(false);
+    }
+    return null;
+  };
+
+  // Проверка, все ли блоки завершили построение
+  const checkAllBlocksComplete = () => {
+    let allComplete = true;
+    for (let i = 0; i < timeBlocksRef.current.length; i++) {
+      if (!timeBlocksRef.current[i].isComplete) {
+        allComplete = false;
+        break;
+      }
+    }
+    
+    if (allComplete) {
+      // Все блоки завершили построение - начинаем новый цикл
+      const newCycleDay = globalCycleDayRef.current + 1;
+      globalCycleDayRef.current = newCycleDay;
+      setGlobalCycleDay(newCycleDay);
+      
+      // Сбрасываем все блоки для нового цикла
+      setTimeBlocks(prevBlocks => {
+        const newBlocks = [...prevBlocks];
+        for (let i = 0; i < newBlocks.length; i++) {
+          newBlocks[i].data = Array(24).fill(null);
+          newBlocks[i].lastValue = null;
+          newBlocks[i].currentHour = 0;
+          newBlocks[i].isComplete = false;
+        }
+        return newBlocks;
+      });
+      
+      // Начинаем с первого блока
+      activeBlockIndexRef.current = 0;
+      setActiveBlockIndex(0);
+    }
+  };
+
+  // Построение следующего часа для текущего активного блока
+  const buildNextHour = async () => {
+    if (!isServerRunningRef.current || isPausedRef.current) return;
+    
+    const currentBlock = activeBlockIndexRef.current;
+    const blockData = timeBlocksRef.current[currentBlock];
+    
+    if (!blockData || blockData.isComplete) {
+      const nextBlock = currentBlock + 1;
+      if (nextBlock < timeBlocksRef.current.length) {
+        activeBlockIndexRef.current = nextBlock;
+        setActiveBlockIndex(nextBlock);
+      } else {
+        checkAllBlocksComplete();
+      }
+      return;
+    }
+    
+    const currentHour = blockData.currentHour;
+    
+    // Получаем значение для текущего часа этого блока
+    const value = await fetchHourDataForBlock(currentHour, currentBlock);
+    
+    if (value !== null) {
+      // Добавляем в журнал ТОЛЬКО если значение изменилось относительно ПОСЛЕДНЕГО ЗНАЧЕНИЯ
+      addEventToLog(blockData.label, currentHour, value, blockData.lastValue);
+      
+      // Обновляем данные блока
+      setTimeBlocks(prevBlocks => {
+        const newBlocks = [...prevBlocks];
+        newBlocks[currentBlock].data[currentHour] = value;
+       newBlocks[currentBlock].lastValue  = value; // Сохраняем последнее значение
+        
+        // Обновляем текущий час
+        const nextHour = currentHour + 1;
+        if (nextHour >= 24) {
+          newBlocks[currentBlock].isComplete = true;
+          newBlocks[currentBlock].currentHour = 0;
+        } else {
+          newBlocks[currentBlock].currentHour = nextHour;
+        }
+        
+        return newBlocks;
+      });
+      
+      // Обновляем ref
+      setTimeout(() => {
+        timeBlocksRef.current = timeBlocks;
+      }, 0);
+    }
+  };
+
+  // Запуск периодической проверки сервера
+  const startServerCheck = () => {
+    if (serverCheckRef.current) clearInterval(serverCheckRef.current);
+    
+    serverCheckRef.current = setInterval(() => {
+      checkServerStatus();
+    }, 2000);
+  };
+
+  const handleStart = () => {
+    if (isServerRunningRef.current) return;
+    
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    
+    setIsServerRunning(true);
+    isServerRunningRef.current = true;
+    setIsPaused(false);
+    isPausedRef.current = false;
+    setGlobalCycleDay(1);
+    globalCycleDayRef.current = 1;
+    setActiveBlockIndex(0);
+    activeBlockIndexRef.current = 0;
+    
+    setTimeBlocks(prev => {
+      const newBlocks = [...prev];
+      for (let i = 0; i < newBlocks.length; i++) {
+        newBlocks[i].data = Array(24).fill(null);
+        newBlocks[i].lastValue = null;
+        newBlocks[i].currentHour = 0;
+        newBlocks[i].isComplete = false;
+      }
+      return newBlocks;
+    });
+    
+    setEvents([]);
+    
+    startServerCheck();
+    checkServerStatus();
+    
+    intervalRef.current = setInterval(() => {
+      buildNextHour();
+    }, 1000);
+  };
+  
+  const handleStopReset = () => {
+    if (!isPausedRef.current && isServerRunningRef.current) {
+      setIsPaused(true);
+      isPausedRef.current = true;
+      setIsServerRunning(false);
+      isServerRunningRef.current = false;
+      
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    } else {
+      setIsPaused(false);
+      isPausedRef.current = false;
+      setIsServerRunning(false);
+      isServerRunningRef.current = false;
+      setIsConnected(false);
+      setGlobalCycleDay(1);
+      globalCycleDayRef.current = 1;
+      setActiveBlockIndex(0);
+      activeBlockIndexRef.current = 0;
+      
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (serverCheckRef.current) clearInterval(serverCheckRef.current);
+      intervalRef.current = null;
+      serverCheckRef.current = null;
+      
+      setTimeBlocks(prev => {
+        const newBlocks = [...prev];
+        for (let i = 0; i < newBlocks.length; i++) {
+          newBlocks[i].data = Array(24).fill(null);
+          newBlocks[i].lastValue = null;
+          newBlocks[i].currentHour = 0;
+          newBlocks[i].isComplete = false;
+        }
+        return newBlocks;
+      });
+      
+      setEvents([]);
+    }
+  };
 
   const toggleLight = (index: number) => {
     setLightsOn(prev => {
@@ -73,43 +299,62 @@ function App() {
   };
 
   const getTooltipText = (blockIndex: number, mouseX: number, rectWidth: number) => {
-  const block = timeBlocks[blockIndex];
-  const hourIndex = Math.floor((mouseX / rectWidth) * 24);
-  
-  if (hourIndex < 0 || hourIndex >= 24) return null;
-  
-  const value = block.data[hourIndex];
-  
-  if (value === 1) {
-    let startHour = hourIndex;
-    let endHour = hourIndex;
+    const block = timeBlocks[blockIndex];
+    const hourIndex = Math.floor((mouseX / rectWidth) * 24);
     
-    for (let i = hourIndex; i >= 0; i--) {
-      if (block.data[i] === 1) startHour = i;
-      else break;
+    if (hourIndex < 0 || hourIndex >= 24) return null;
+    
+    const value = block.data[hourIndex];
+    
+    if (value === 1) {
+      let startHour = hourIndex;
+      let endHour = hourIndex;
+      
+      for (let i = hourIndex; i >= 0; i--) {
+        if (block.data[i] === 1) startHour = i;
+        else break;
+      }
+      
+      for (let i = hourIndex; i < block.data.length; i++) {
+        if (block.data[i] === 1) endHour = i;
+        else break;
+      }
+      
+      const hoursCount = endHour - startHour + 1;
+      const hoursText = hoursCount === 1 ? `${hoursCount} час` : `${hoursCount} часов`;
+      
+      return { text: `свет включен с ${startHour} по ${endHour} (${hoursText})`, x: mouseX };
+    } else if (value === 0) {
+      return { text: `свет выключен в ${hourIndex} час`, x: mouseX };
     }
     
-    for (let i = hourIndex; i < block.data.length; i++) {
-      if (block.data[i] === 1) endHour = i;
-      else break;
-    }
-    
-    const hoursCount = endHour - startHour + 1;
-    const hoursText = hoursCount === 1 ? `${hoursCount} час` : `${hoursCount} часов`;
-    
-    return { text: `свет включен с ${startHour} по ${endHour} (${hoursText})`, x: mouseX };
-  }
-  
-  return null;
-};
+    return null;
+  };
 
-  const handleStart = () => console.log("Старт");
-  const handleStopReset = () => console.log("Стоп/Сброс");
   const handleAddOperation = () => console.log("Добавить операцию");
   const handleSaveOperation = () => console.log("Сохранить операцию");
   const handleDeleteOperation = () => console.log("Удалить операцию");
   const handleManualMode = () => console.log("Ручной режим");
   const toggleConnection = () => setIsConnected(!isConnected);
+
+  const getCurrentBuildInfo = () => {
+    if (activeBlockIndexRef.current < timeBlocks.length) {
+      const block = timeBlocks[activeBlockIndexRef.current];
+      return `${block.label} шкала: час ${block.currentHour}/23`;
+    }
+    return "Построение завершено";
+  };
+
+  useEffect(() => {
+    timeBlocksRef.current = timeBlocks;
+  }, [timeBlocks]);
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (serverCheckRef.current) clearInterval(serverCheckRef.current);
+    };
+  }, []);
 
   return (
     <div className="app-container">
@@ -195,7 +440,15 @@ function App() {
                 <div className="days-column">
                   <div className="day-header">ДЕНЬ</div>
                   {timeBlocks.map((block, idx) => (
-                    <div key={idx} className="time-label">
+                    <div 
+                      key={idx} 
+                      className="time-label"
+                      style={{
+                        background: activeBlockIndex === idx && isServerRunning ? '#F36035' : 'transparent',
+                        color: activeBlockIndex === idx && isServerRunning ? 'white' : '#D9E986',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
                       {block.label}
                     </div>
                   ))}
@@ -203,7 +456,9 @@ function App() {
 
                 <div className="charts-column">
                   <div className="hours-header">
-                    <div className="hours-title">ЧАСЫ</div>
+                    <div className="hours-title">
+                      ЧАСЫ (построение: {getCurrentBuildInfo()})
+                    </div>
                     <div className="hours-scale">
                       {hours.map((hour) => (
                         <div key={hour} className="hour-segment">
@@ -218,6 +473,10 @@ function App() {
                       <div 
                         key={blockIdx} 
                         className="chart-row"
+                        style={{
+                          opacity: blockIdx === activeBlockIndex && isServerRunning && !block.isComplete ? 1 : 0.7,
+                          transition: 'opacity 0.3s ease'
+                        }}
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
                           const x = e.clientX - rect.left;
@@ -233,81 +492,86 @@ function App() {
                         }}
                       >
                         <svg className="row-svg" viewBox="0 0 800 30" preserveAspectRatio="none">
-  <polyline
-    points={(() => {
-      const points = [];
-      for (let i = 0; i <= block.data.length; i++) {
-        let x, y;
-        if (i === 0) {
-          x = 0;
-          y = block.data[0] === 1 ? 5 : 25;
-          points.push(`${x},${y}`);
-        }
-        
-        if (i < block.data.length) {
-          x = i * (800 / 24);
-          
-          if (i > 0 && block.data[i] !== block.data[i - 1]) {
-            if (block.data[i] === 1) {
-              points.push(`${x},25`);
-              points.push(`${x},5`);
-            } else {
-              points.push(`${x},5`);
-              points.push(`${x},25`);
-            }
-          }
-          
-          y = block.data[i] === 1 ? 5 : 25;
-          points.push(`${x},${y}`);
-        }
-      }
-      return points.join(' ');
-    })()}
-    fill="none"
-    stroke="#B999EC"
-    strokeWidth="2"
-    strokeLinejoin="miter"
-    strokeLinecap="butt"
-  />
-  <polygon
-    points={`0,30 ${(() => {
-      const points = [];
-      for (let i = 0; i <= block.data.length; i++) {
-        let x, y;
-        if (i === 0) {
-          x = 0;
-          y = block.data[0] === 1 ? 5 : 25;
-          points.push(`${x},${y}`);
-        }
-        
-        if (i < block.data.length) {
-          x = i * (800 / 24);
-          
-          if (i > 0 && block.data[i] !== block.data[i - 1]) {
-            if (block.data[i] === 1) {
-              points.push(`${x},25`);
-              points.push(`${x},5`);
-            } else {
-              points.push(`${x},5`);
-              points.push(`${x},25`);
-            }
-          }
-          
-          y = block.data[i] === 1 ? 5 : 25;
-          points.push(`${x},${y}`);
-        }
-      }
-      return points.join(' ');
-    })()} 800,30`}
-    fill="rgba(185, 153, 236, 0.25)"
-  />
-</svg>
+                          <polyline
+                            points={(() => {
+                              const points = [];
+                              for (let i = 0; i <= block.data.length; i++) {
+                                let x, y;
+                                if (i === 0) {
+                                  x = 0;
+                                  y = block.data[0] === 1 ? 5 : (block.data[0] === 0 ? 25 : 15);
+                                  points.push(`${x},${y}`);
+                                }
+                                
+                                if (i < block.data.length) {
+                                  x = i * (800 / 24);
+                                  
+                                  if (i > 0 && block.data[i] !== block.data[i - 1]) {
+                                    if (block.data[i] === 1) {
+                                      points.push(`${x},25`);
+                                      points.push(`${x},5`);
+                                    } else if (block.data[i] === 0) {
+                                      points.push(`${x},5`);
+                                      points.push(`${x},25`);
+                                    }
+                                  }
+                                  
+                                  y = block.data[i] === 1 ? 5 : (block.data[i] === 0 ? 25 : 15);
+                                  points.push(`${x},${y}`);
+                                }
+                              }
+                              return points.join(' ');
+                            })()}
+                            fill="none"
+                            stroke="#B999EC"
+                            strokeWidth="2"
+                            strokeLinejoin="miter"
+                            strokeLinecap="butt"
+                          />
+                          <polygon
+                            points={`0,30 ${(() => {
+                              const points = [];
+                              for (let i = 0; i <= block.data.length; i++) {
+                                let x, y;
+                                if (i === 0) {
+                                  x = 0;
+                                  y = block.data[0] === 1 ? 5 : (block.data[0] === 0 ? 25 : 15);
+                                  points.push(`${x},${y}`);
+                                }
+                                
+                                if (i < block.data.length) {
+                                  x = i * (800 / 24);
+                                  
+                                  if (i > 0 && block.data[i] !== block.data[i - 1]) {
+                                    if (block.data[i] === 1) {
+                                      points.push(`${x},25`);
+                                      points.push(`${x},5`);
+                                    } else if (block.data[i] === 0) {
+                                      points.push(`${x},5`);
+                                      points.push(`${x},25`);
+                                    }
+                                  }
+                                  
+                                  y = block.data[i] === 1 ? 5 : (block.data[i] === 0 ? 25 : 15);
+                                  points.push(`${x},${y}`);
+                                }
+                              }
+                              return points.join(' ');
+                            })()} 800,30`}
+                            fill="rgba(185, 153, 236, 0.25)"
+                          />
+                        </svg>
                         {activeTooltip && activeTooltip.blockIndex === blockIdx && (
                           <div 
                             className="chart-tooltip"
                             style={{ left: `${activeTooltip.x}px` }}
                           >
                             {activeTooltip.text}
+                          </div>
+                        )}
+                        {block.isComplete && (
+                          <div className="block-complete-badge">
+                            ✓
                           </div>
                         )}
                       </div>
@@ -333,22 +597,22 @@ function App() {
 
               <div className="event-log">
                 <div className="event-log-header">
-                  ЖУРНАЛ СОБЫТИЙ
+                  ЖУРНАЛ СОБЫТИЙ (Цикл {globalCycleDay})
                 </div>
                 <div className="event-log-table">
                   <div className="event-table-header">
-                    <div className="col-1">Название</div>
-                    <div className="col-2">Название</div>
-                    <div className="col-3">Название</div>
-                    <div className="col-4">Название</div>
+                    <div className="col-1">День</div>
+                    <div className="col-2">Час</div>
+                    <div className="col-3">Событие</div>
+                    <div className="col-4">День цикла</div>
                   </div>
                   <div className="event-table-body">
-                    {events.map((event) => (
-                      <div key={event.id} className="event-table-row">
-                        <div className="col-1">{event.col1}</div>
-                        <div className="col-2">{event.col2}</div>
-                        <div className="col-3">{event.col3}</div>
-                        <div className="col-4">{event.col4}</div>
+                    {events.map((event, idx) => (
+                      <div key={idx} className="event-table-row">
+                        <div className="col-1">{event.day}</div>
+                        <div className="col-2">{event.hour}</div>
+                        <div className="col-3">{event.event}</div>
+                        <div className="col-4">{event.cycleDay}</div>
                       </div>
                     ))}
                   </div>
